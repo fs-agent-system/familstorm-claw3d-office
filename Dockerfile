@@ -28,6 +28,10 @@ COPY --from=builder /app/server ./server
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/next.config.ts ./next.config.ts
+# next.config.ts buộc Next đọc TS config lúc runtime — thiếu typescript nó sẽ
+# tự `yarn add` mỗi lần start (chậm, cần mạng). Copy sẵn từ builder cho tất định.
+COPY --from=builder /app/node_modules/typescript ./node_modules/typescript
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 EXPOSE 3000
 
