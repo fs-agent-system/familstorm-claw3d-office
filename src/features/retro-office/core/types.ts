@@ -13,6 +13,8 @@ export type OfficeAgent = {
    * that the scene animation logic relies on.
    */
   officeState?: OfficeAgentState;
+  /** Portrait photo URL (Familstorm roster) shown in overlays instead of initials. */
+  avatarUrl?: string | null;
   color: string;
   item: string;
   avatarProfile?: AgentAvatarProfile | null;

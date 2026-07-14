@@ -5975,7 +5975,16 @@ export function RetroOffice3D({
                         {mood.emoji}
                       </span>
                     ) : null}
-                    <span>{getAgentInitials(agent.name)}</span>
+                    {agent.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={agent.avatarUrl}
+                        alt={agent.name}
+                        className="absolute inset-0 h-full w-full rounded-full object-cover"
+                      />
+                    ) : (
+                      <span>{getAgentInitials(agent.name)}</span>
+                    )}
                     {visual?.emoji ? (
                       <span className="absolute -top-1 -left-1 text-[9px] leading-none pointer-events-none">
                         {visual.emoji}
@@ -6056,7 +6065,16 @@ export function RetroOffice3D({
                           className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-[#120e08]"
                           style={{ backgroundColor: agent.color }}
                         >
-                          {getAgentInitials(agent.name)}
+                          {agent.avatarUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={agent.avatarUrl}
+                              alt={agent.name}
+                              className="absolute inset-0 h-full w-full rounded-full object-cover"
+                            />
+                          ) : (
+                            getAgentInitials(agent.name)
+                          )}
                           <span
                             className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-[#120e08] ${dotClass}`}
                           />
@@ -6156,10 +6174,19 @@ export function RetroOffice3D({
             <div className="absolute top-24 left-1/2 -translate-x-1/2 z-30 pointer-events-none select-none">
               <div className="flex items-center gap-3 bg-[#120e08]/95 backdrop-blur-sm border border-amber-800/30 rounded-lg px-4 py-2.5 shadow-xl">
                 <div className="relative shrink-0">
-                  <div
-                    className="w-6 h-6 rounded-sm"
-                    style={{ backgroundColor: hoveredAgent.color }}
-                  />
+                  {hoveredAgent.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={hoveredAgent.avatarUrl}
+                      alt={hoveredAgent.name}
+                      className="w-6 h-6 rounded-sm object-cover"
+                    />
+                  ) : (
+                    <div
+                      className="w-6 h-6 rounded-sm"
+                      style={{ backgroundColor: hoveredAgent.color }}
+                    />
+                  )}
                   <div
                     className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-[#120e08] ${visual.dotClass}`}
                   />

@@ -165,3 +165,19 @@ export const DESK_ASSIGNMENTS: Readonly<Record<string, string>> = Object.freeze(
 );
 
 export const FAMILSTORM_OFFICE_ID = "familstorm-main-office";
+
+/**
+ * Portrait avatar URL (public/) cho từng agent — ảnh chân dung Manager cung cấp,
+ * đặt tên theo `label`. Dùng ở overlay (chip/panel/hover) thay initials; nhân
+ * vật 3D vẫn procedural. Deterministic theo label.
+ */
+export const familstormAvatarUrl = (label: string): string =>
+  `/avatars/familstorm/${label}.jpg`;
+
+/** label → portrait URL, chỉ cho 8 agent cố định (nguồn nhận diện tin cậy). */
+export const FAMILSTORM_AVATAR_BY_LABEL: Readonly<Record<string, string>> =
+  Object.freeze(
+    Object.fromEntries(
+      FAMILSTORM_AGENT_ROSTER.map((a) => [a.label, familstormAvatarUrl(a.label)]),
+    ),
+  );
