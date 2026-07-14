@@ -72,8 +72,15 @@ const GATE_LOG =
 const PORT = Number.parseInt(process.env.HERMES_OFFICE_BRIDGE_PORT || "18790", 10);
 const WORKSPACE_ID = (process.env.HERMES_OFFICE_WORKSPACE_ID || "familstorm-main-office").trim();
 const TOKEN = (process.env.HERMES_OFFICE_BRIDGE_TOKEN || "").trim();
-const FRESH_MIN = Number.parseFloat(process.env.HERMES_OFFICE_FRESH_MIN || "12");
+// "just completed" window (minutes) → shows `completed` then settles to idle.
+const FRESH_MIN = Number.parseFloat(process.env.HERMES_OFFICE_FRESH_MIN || "0.25"); // ~15s (§5)
+// A WORK line with no DONE for this long → assume crashed session, fall to idle.
 const WORK_STALE_MIN = Number.parseFloat(process.env.HERMES_OFFICE_WORK_STALE_MIN || "60");
+// A fresh WORK line (seconds) reads as `thinking` before settling into `working`.
+const THINK_SEC = Number.parseFloat(process.env.HERMES_OFFICE_THINK_SEC || "25");
+// Working hours (local VPS tz). Outside → whole office `offline` (§10 OFF-HOURS).
+const OPEN_HOUR = Number.parseInt(process.env.HERMES_OFFICE_OPEN_HOUR || "6", 10);
+const CLOSE_HOUR = Number.parseInt(process.env.HERMES_OFFICE_CLOSE_HOUR || "22", 10);
 
 /**
  * Role → display metadata. Canonical id = Hermes profile `label` == role key,
@@ -93,18 +100,15 @@ const ROLE_META = {
   "account-manager": { name: "Sứ Giả", deskId: "desk-account-manager" },
 };
 
-// ── gate.log verb → operational state ────────────────────────────────────────
-// Verbs that carry an agent-state signal. SKIP (gate didn't run) and
-// MERGE-REFUSED (a policy note, not agent activity) are intentionally ignored:
-// they must NOT overwrite the last real state.
+// ── gate.log verb → operational state (10-state model, HERMES-09 §5/§10) ─────
+// SKIP (gate didn't run) and MERGE-REFUSED (a policy note, not agent activity)
+// are intentionally ignored: they must NOT overwrite the last real state.
 const IGNORED_VERBS = new Set(["SKIP", "MERGE-REFUSED"]);
-// Outputs produced during/at the end of a working session → "recently worked".
-const WORKED_VERBS = new Set(["DONE", "EVIDENCE", "MERGED", "HANDOFF", "PROMOTE-STAGING"]);
-// Signals that need Manager attention.
-const ATTENTION_VERBS = new Set(["BLOCKED", "ESCALATED", "WARN"]);
 
 const FAILURE_RE =
   /connection error|no active credentials|http [45]\d\d|\berror:/i;
+// A WORK line about a PR review / QA verification → `reviewing` (Review Center).
+const REVIEW_RE = /\breview\b|\bpr #?\d|awaiting .*review|qa verif|qa check/i;
 
 // Line: "<ts> [<role>] <VERB>: <msg>"  (VERB is UPPERCASE letters + hyphen)
 const LINE_RE = /^(\S+)\s+\[([^\]]+)\]\s+([A-Z][A-Z-]*):\s*(.*)$/;
@@ -161,32 +165,61 @@ function refreshFromLog() {
   }
 }
 
+function isOffHours(nowMs) {
+  const hour = new Date(nowMs).getHours();
+  // Open [OPEN_HOUR, CLOSE_HOUR); everything else is off-hours.
+  return hour < OPEN_HOUR || hour >= CLOSE_HOUR;
+}
+
+// Resolve one of the 10 operational states from the latest state-bearing line.
+// Off-hours (whole office) is applied by the caller, not here.
 function computeState(entry, nowMs) {
   if (!entry) return "idle";
   const { verb, msg, tsMs } = entry;
   const ageMin = (nowMs - tsMs) / 60000;
+  const ageSec = (nowMs - tsMs) / 1000;
+  const failure = FAILURE_RE.test(msg);
 
-  if (verb === "IDLE") return "idle";
-  if (ATTENTION_VERBS.has(verb)) return "error";
-  if (WORKED_VERBS.has(verb)) {
-    if (FAILURE_RE.test(msg)) return "error";
-    return ageMin <= FRESH_MIN ? "working" : "idle";
+  switch (verb) {
+    case "IDLE":
+      return "idle";
+    case "WARN":
+      return "error";
+    case "BLOCKED":
+      return "blocked";
+    case "ESCALATED": // needs:manager → blocked + notify (§10)
+      return "blocked";
+    case "HANDOFF":
+      return "meeting";
+    case "EVIDENCE": // produced work, awaiting next step (e.g. review/CI)
+      return "waiting";
+    case "WORK": {
+      if (REVIEW_RE.test(msg)) return "reviewing";
+      if (ageMin > WORK_STALE_MIN) return "idle"; // crashed-session guard
+      if (ageSec <= THINK_SEC) return "thinking"; // just spun up
+      return "working";
+    }
+    case "DONE":
+      if (failure) return "error";
+      return ageMin <= FRESH_MIN ? "completed" : "idle";
+    case "MERGED":
+      return ageMin <= FRESH_MIN ? "completed" : "idle";
+    case "PROMOTE-STAGING":
+      return ageMin <= WORK_STALE_MIN ? "working" : "idle"; // DevOps activity
+    default:
+      return failure ? "error" : "idle";
   }
-  if (verb === "WORK") {
-    // In-progress until a DONE arrives; guard against a crashed session that
-    // never logged DONE by falling back to idle after WORK_STALE_MIN.
-    return ageMin <= WORK_STALE_MIN ? "working" : "idle";
-  }
-  return "idle";
 }
 
 function buildSnapshot() {
   refreshFromLog();
   const nowMs = Date.now();
+  const offHours = isOffHours(nowMs);
   const agents = Object.keys(ROLE_META).map((role) => {
     const meta = ROLE_META[role];
     const entry = roleState.get(role);
-    const state = computeState(entry, nowMs);
+    // OFF-HOURS overrides everything → whole office offline (§10).
+    const state = offHours ? "offline" : computeState(entry, nowMs);
     const agent = {
       agentId: role,
       name: meta.name,

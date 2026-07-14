@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { resolveStateDir } from "@/lib/clawdbot/paths";
 import { readConfigAgentList } from "@/lib/gateway/agentConfig";
-import type { OfficeAgentState } from "@/lib/office/schema";
+import { OFFICE_AGENT_STATES, type OfficeAgentState } from "@/lib/office/schema";
 
 export type OfficeAgentPresence = {
   agentId: string;
@@ -40,8 +40,8 @@ const asRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));
 
 const normalizeOfficeAgentState = (value: unknown): OfficeAgentState => {
-  if (value === "working" || value === "idle" || value === "meeting" || value === "error") {
-    return value;
+  if (typeof value === "string" && (OFFICE_AGENT_STATES as readonly string[]).includes(value)) {
+    return value as OfficeAgentState;
   }
   return "idle";
 };

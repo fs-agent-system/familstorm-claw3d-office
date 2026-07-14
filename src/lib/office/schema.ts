@@ -14,7 +14,59 @@ export type OfficeZoneType =
   | "hallway"
   | "coffee_area";
 
-export type OfficeAgentState = "idle" | "working" | "meeting" | "error";
+/**
+ * Operational agent state (agent-state-model-spec). The Familstorm office
+ * (HERMES-09 §5/§10) drives all 10 states from the Event Bridge; the legacy
+ * 4-state values (`idle/working/meeting/error`) remain valid for backward
+ * compatibility. The 3-state retro scene collapses these via
+ * {@link collapseOfficeAgentState}.
+ */
+export type OfficeAgentState =
+  | "idle"
+  | "thinking"
+  | "working"
+  | "waiting"
+  | "reviewing"
+  | "blocked"
+  | "meeting"
+  | "completed"
+  | "error"
+  | "offline";
+
+export const OFFICE_AGENT_STATES: readonly OfficeAgentState[] = [
+  "idle",
+  "thinking",
+  "working",
+  "waiting",
+  "reviewing",
+  "blocked",
+  "meeting",
+  "completed",
+  "error",
+  "offline",
+] as const;
+
+/** Scene-render vocabulary of the retro office (see retro-office/core/types.ts). */
+export type OfficeSceneStatus = "working" | "idle" | "error";
+
+/**
+ * Collapse the rich 10-state model down to the 3 states the retro scene can
+ * currently render. Richer visuals (thinking bubble, review walk, blocked ⚠,
+ * merged 🎉) are layered on separately (HERMES-09 nhánh C, bước C2/C3).
+ */
+export const collapseOfficeAgentState = (state: OfficeAgentState): OfficeSceneStatus => {
+  switch (state) {
+    case "error":
+    case "blocked":
+      return "error";
+    case "idle":
+    case "offline":
+      return "idle";
+    default:
+      // thinking / working / waiting / reviewing / meeting / completed
+      return "working";
+  }
+};
 
 export type OfficeLightPreset =
   | "ceiling_lamp"

@@ -61,6 +61,7 @@ import {
   stripUiMetadata,
 } from "@/lib/text/message-extract";
 import { resolveOfficeIntentSnapshot } from "@/lib/office/deskDirectives";
+import { collapseOfficeAgentState, type OfficeAgentState } from "@/lib/office/schema";
 import { OfficeFloorNav } from "@/features/office/components/OfficeFloorNav";
 import { AgentChatPanel } from "@/features/agents/components/AgentChatPanel";
 import {
@@ -592,14 +593,13 @@ const mapAgentToOffice = (agent: AgentState): OfficeAgent => {
 const mapRemotePresenceAgentToOffice = (agent: {
   agentId: string;
   name: string;
-  state: "idle" | "working" | "meeting" | "error";
+  state: OfficeAgentState;
 }): OfficeAgent => {
   const stableId = `remote:${agent.agentId}`;
-  const isWorking = agent.state === "working" || agent.state === "meeting";
   return {
     id: stableId,
     name: agent.name || "Unknown",
-    status: agent.state === "error" ? "error" : isWorking ? "working" : "idle",
+    status: collapseOfficeAgentState(agent.state),
     color: stringToColor(stableId),
     item: getDeterministicItem(stableId),
     avatarProfile: null,
