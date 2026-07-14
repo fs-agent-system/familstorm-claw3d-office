@@ -52,6 +52,7 @@ import {
   resolveAgentStateVisual,
   type AgentStateVisual,
 } from "@/lib/office/agentStateVisual";
+import { isFamilstormRemoteAgentId } from "@/config/familstorm-agent-roster";
 import type { OfficeAnimationState } from "@/lib/office/eventTriggers";
 import type { StandupMeeting } from "@/lib/office/standup/types";
 import type { SkillStatusEntry } from "@/lib/skills/types";
@@ -902,25 +903,39 @@ function useAgentTick(
       astar(fx, fy, tx, ty, getNavGrid()),
     [getNavGrid],
   );
-  const pickRoamPoint = useCallback((agentId: string) => {
-    if (isRemoteOfficeAgentId(agentId)) {
-      return REMOTE_ROAM_POINTS[
-        Math.floor(Math.random() * REMOTE_ROAM_POINTS.length)
-      ];
-    }
-    return ROAM_POINTS[Math.floor(Math.random() * ROAM_POINTS.length)];
-  }, []);
-  const pickSpawnPoint = useCallback((agentId: string) => {
-    if (isRemoteOfficeAgentId(agentId)) {
-      return REMOTE_ROAM_POINTS[
-        Math.floor(Math.random() * REMOTE_ROAM_POINTS.length)
-      ];
-    }
-    return {
-      x: Math.random() * 800 + 100,
-      y: Math.random() * 500 + 100,
-    };
-  }, []);
+  // Familstorm fixed-roster agents are MAIN-office staff even though they
+  // arrive via remote presence — they spawn/roam on the office floor, not in
+  // the outdoor district reserved for other remote offices (HERMES-09 §6.2).
+  const isDistrictRemoteAgentId = useCallback(
+    (agentId: string) =>
+      isRemoteOfficeAgentId(agentId) && !isFamilstormRemoteAgentId(agentId),
+    [],
+  );
+  const pickRoamPoint = useCallback(
+    (agentId: string) => {
+      if (isDistrictRemoteAgentId(agentId)) {
+        return REMOTE_ROAM_POINTS[
+          Math.floor(Math.random() * REMOTE_ROAM_POINTS.length)
+        ];
+      }
+      return ROAM_POINTS[Math.floor(Math.random() * ROAM_POINTS.length)];
+    },
+    [isDistrictRemoteAgentId],
+  );
+  const pickSpawnPoint = useCallback(
+    (agentId: string) => {
+      if (isDistrictRemoteAgentId(agentId)) {
+        return REMOTE_ROAM_POINTS[
+          Math.floor(Math.random() * REMOTE_ROAM_POINTS.length)
+        ];
+      }
+      return {
+        x: Math.random() * 800 + 100,
+        y: Math.random() * 500 + 100,
+      };
+    },
+    [isDistrictRemoteAgentId],
+  );
 
   const standupActive =
     standupMeeting?.phase === "gathering" ||
@@ -2108,7 +2123,7 @@ function useAgentTick(
             if (Math.random() < 0.005) {
               // Idea 6: 15% chance to walk to a social furniture item instead of a random roam point.
               let target: { x: number; y: number } | null = null;
-              const socialCandidates = isRemoteOfficeAgentId(agent.id)
+              const socialCandidates = isDistrictRemoteAgentId(agent.id)
                 ? []
                 : socialFurniture;
               if (socialCandidates.length > 0 && Math.random() < 0.15) {
@@ -2128,7 +2143,7 @@ function useAgentTick(
                   Math.round((f.x + off.dx * 30) / SNAP_GRID) * SNAP_GRID;
                 const ty =
                   Math.round((f.y + off.dy * 30) / SNAP_GRID) * SNAP_GRID;
-                target = isRemoteOfficeAgentId(agent.id)
+                target = isDistrictRemoteAgentId(agent.id)
                   ? clampPointToZone(tx, ty, REMOTE_OFFICE_ZONE)
                   : {
                       x: Math.max(
@@ -2770,13 +2785,29 @@ export function RetroOffice3D({
   const deskLocations = useMemo(() => getDeskLocations(furniture), [furniture]);
   const assignedDeskIndexByAgentId = useMemo(() => {
     const next: Record<string, number> = {};
+    const taken = new Set<number>();
     deskItems.forEach((item, index) => {
       const agentId = deskAssignmentByDeskUid[item._uid];
       if (!agentId) return;
       next[agentId] = index;
+      taken.add(index);
     });
+    // Familstorm fixed roster: auto-seat agents without a manual desk at the
+    // free desks. Sorted by id so seating is stable across presence polls and
+    // does not depend on the order Hermes returns agents (HERMES-09 §6.2).
+    const unseatedFamilstorm = agents
+      .map((agent) => agent.id)
+      .filter((id) => isFamilstormRemoteAgentId(id) && next[id] === undefined)
+      .sort();
+    let cursor = 0;
+    for (const id of unseatedFamilstorm) {
+      while (cursor < deskItems.length && taken.has(cursor)) cursor += 1;
+      if (cursor >= deskItems.length) break;
+      next[id] = cursor;
+      taken.add(cursor);
+    }
     return next;
-  }, [deskAssignmentByDeskUid, deskItems]);
+  }, [agents, deskAssignmentByDeskUid, deskItems]);
   const janitorCleaningStops = useMemo(
     () => getJanitorCleaningStops(furniture),
     [furniture],

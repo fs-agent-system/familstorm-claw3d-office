@@ -181,3 +181,15 @@ export const FAMILSTORM_AVATAR_BY_LABEL: Readonly<Record<string, string>> =
       FAMILSTORM_AGENT_ROSTER.map((a) => [a.label, familstormAvatarUrl(a.label)]),
     ),
   );
+
+/**
+ * Scene ids (`remote:<label>`) của 8 agent cố định. Khác remote agent thường
+ * (văn phòng KHÁC, đứng khu district ngoài trời), 8 agent này là nhân viên
+ * văn phòng CHÍNH: spawn/roam trong sàn + được auto-gán desk (HERMES-09 §6.2).
+ */
+export const FAMILSTORM_REMOTE_AGENT_IDS: ReadonlySet<string> = new Set(
+  FAMILSTORM_AGENT_ROSTER.map((a) => `remote:${a.label}`),
+);
+
+export const isFamilstormRemoteAgentId = (agentId: string): boolean =>
+  FAMILSTORM_REMOTE_AGENT_IDS.has(agentId);
