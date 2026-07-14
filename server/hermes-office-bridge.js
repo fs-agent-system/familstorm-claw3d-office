@@ -71,6 +71,9 @@ const GATE_LOG =
   (process.env.HERMES_GATE_LOG || "").trim() ||
   path.join(os.homedir(), ".hermes-cron", "gate.log");
 const PORT = Number.parseInt(process.env.HERMES_OFFICE_BRIDGE_PORT || "18790", 10);
+// Bind host. Mặc định loopback — KHÔNG mở ra internet. Trên VPS đặt 172.17.0.1
+// (docker bridge gateway) để container Claw3D gọi qua host.docker.internal.
+const HOST = (process.env.HERMES_OFFICE_BRIDGE_HOST || "127.0.0.1").trim();
 const WORKSPACE_ID = (process.env.HERMES_OFFICE_WORKSPACE_ID || "familstorm-main-office").trim();
 const TOKEN = (process.env.HERMES_OFFICE_BRIDGE_TOKEN || "").trim();
 // "just completed" window (minutes) → shows `completed` then settles to idle.
@@ -407,8 +410,8 @@ if (GH_ENABLED) {
   setInterval(refreshGithub, GH_POLL_SEC * 1000).unref();
 }
 
-server.listen(PORT, () => {
-  console.log(`[office-bridge] listening on http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`[office-bridge] listening on http://${HOST}:${PORT}`);
   console.log(`[office-bridge] gate.log: ${GATE_LOG} (present=${fs.existsSync(GATE_LOG)})`);
   console.log(`[office-bridge] workspace: ${WORKSPACE_ID}, auth=${TOKEN ? "on" : "off"}`);
   console.log(
