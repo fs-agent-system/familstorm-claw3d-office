@@ -5,11 +5,21 @@ import { resolveStateDir } from "@/lib/clawdbot/paths";
 import { readConfigAgentList } from "@/lib/gateway/agentConfig";
 import { OFFICE_AGENT_STATES, type OfficeAgentState } from "@/lib/office/schema";
 
+/** GitHub work item an agent is holding (HERMES-09 nhánh B): issue assigned or PR authored. */
+export type OfficeAgentWorkItem = {
+  kind: "issue" | "pr";
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+};
+
 export type OfficeAgentPresence = {
   agentId: string;
   name: string;
   state: OfficeAgentState;
   preferredDeskId?: string;
+  task?: OfficeAgentWorkItem;
 };
 
 export type OfficePresenceSnapshot = {
@@ -38,6 +48,22 @@ const resolveStateFromSeed = (seed: number): OfficeAgentState => {
 
 const asRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));
+
+const normalizeOfficeAgentWorkItem = (value: unknown): OfficeAgentWorkItem | undefined => {
+  if (!asRecord(value)) return undefined;
+  const kind = value.kind === "pr" || value.kind === "issue" ? value.kind : undefined;
+  const number = typeof value.number === "number" && Number.isFinite(value.number)
+    ? value.number
+    : undefined;
+  if (!kind || number === undefined) return undefined;
+  return {
+    kind,
+    number,
+    repo: typeof value.repo === "string" ? value.repo : "",
+    title: typeof value.title === "string" ? value.title.slice(0, 200) : "",
+    url: typeof value.url === "string" ? value.url : "",
+  };
+};
 
 const normalizeOfficeAgentState = (value: unknown): OfficeAgentState => {
   if (typeof value === "string" && (OFFICE_AGENT_STATES as readonly string[]).includes(value)) {
@@ -77,12 +103,14 @@ export const normalizeOfficePresenceSnapshot = (
       typeof entry.preferredDeskId === "string" && entry.preferredDeskId.trim().length > 0
         ? entry.preferredDeskId.trim()
         : undefined;
+    const task = normalizeOfficeAgentWorkItem(entry.task);
     return [
       {
         agentId,
         name,
         state: normalizeOfficeAgentState(entry.state),
         ...(preferredDeskId ? { preferredDeskId } : {}),
+        ...(task ? { task } : {}),
       },
     ];
   });

@@ -5947,7 +5947,14 @@ export function RetroOffice3D({
                   <button
                     key={agent.id}
                     type="button"
-                    title={visual ? `${agent.name} — ${visual.label}` : agent.name}
+                    title={[
+                      visual ? `${agent.name} — ${visual.label}` : agent.name,
+                      agent.workItem
+                        ? `${agent.workItem.kind === "pr" ? "PR" : "issue"} #${agent.workItem.number}`
+                        : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                     onMouseEnter={() => handleAgentHover(agent.id)}
                     onMouseLeave={handleAgentUnhover}
                     onClick={() => {
@@ -6089,6 +6096,16 @@ export function RetroOffice3D({
                             {isRemoteAgent ? " · remote" : ""}
                             {runCount > 0 ? ` · ${runCount} runs` : ""}
                           </div>
+                          {agent.workItem ? (
+                            <div
+                              className="mt-0.5 truncate font-mono text-[10px] text-sky-300/80"
+                              title={`${agent.workItem.repo}#${agent.workItem.number} — ${agent.workItem.title}`}
+                            >
+                              {agent.workItem.kind === "pr" ? "PR" : "issue"} #
+                              {agent.workItem.number}
+                              {agent.workItem.title ? ` · ${agent.workItem.title}` : ""}
+                            </div>
+                          ) : null}
                         </div>
                       </button>
                       <button
@@ -6198,6 +6215,15 @@ export function RetroOffice3D({
                   <div className="text-[10px] text-amber-600 uppercase tracking-widest">
                     {hoveredAgent.item}
                   </div>
+                  {hoveredAgent.workItem ? (
+                    <div className="max-w-[240px] truncate text-[10px] text-sky-300/90">
+                      {hoveredAgent.workItem.kind === "pr" ? "PR" : "issue"} #
+                      {hoveredAgent.workItem.number}
+                      {hoveredAgent.workItem.title
+                        ? ` · ${hoveredAgent.workItem.title}`
+                        : ""}
+                    </div>
+                  ) : null}
                   {/* New Idea 8: last seen timestamp. */}
                   {(() => {
                     const ts = lastSeenByAgentId[hoveredAgent.id];

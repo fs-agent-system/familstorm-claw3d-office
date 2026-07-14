@@ -63,6 +63,7 @@ import {
 import { resolveOfficeIntentSnapshot } from "@/lib/office/deskDirectives";
 import { collapseOfficeAgentState, type OfficeAgentState } from "@/lib/office/schema";
 import { FAMILSTORM_AVATAR_BY_LABEL } from "@/config/familstorm-agent-roster";
+import type { OfficeAgentWorkItem } from "@/lib/office/presence";
 import { OfficeFloorNav } from "@/features/office/components/OfficeFloorNav";
 import { AgentChatPanel } from "@/features/agents/components/AgentChatPanel";
 import {
@@ -595,6 +596,7 @@ const mapRemotePresenceAgentToOffice = (agent: {
   agentId: string;
   name: string;
   state: OfficeAgentState;
+  task?: OfficeAgentWorkItem;
 }): OfficeAgent => {
   const stableId = `remote:${agent.agentId}`;
   return {
@@ -603,6 +605,7 @@ const mapRemotePresenceAgentToOffice = (agent: {
     status: collapseOfficeAgentState(agent.state),
     officeState: agent.state,
     avatarUrl: FAMILSTORM_AVATAR_BY_LABEL[agent.agentId] ?? null,
+    workItem: agent.task ?? null,
     color: stringToColor(stableId),
     item: getDeterministicItem(stableId),
     avatarProfile: null,

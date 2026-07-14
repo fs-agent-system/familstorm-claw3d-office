@@ -15,6 +15,14 @@ export type OfficeAgent = {
   officeState?: OfficeAgentState;
   /** Portrait photo URL (Familstorm roster) shown in overlays instead of initials. */
   avatarUrl?: string | null;
+  /** GitHub work item the agent is holding (issue assigned / PR authored) → badge #N. */
+  workItem?: {
+    kind: "issue" | "pr";
+    repo: string;
+    number: number;
+    title: string;
+    url: string;
+  } | null;
   color: string;
   item: string;
   avatarProfile?: AgentAvatarProfile | null;

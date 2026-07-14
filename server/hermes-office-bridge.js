@@ -34,6 +34,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const { execFile } = require("child_process");
 
 // ── .env loader (same convention as hermes-gateway-adapter.js) ──────────────
 function loadDotenvFile(filePath) {
@@ -81,6 +82,11 @@ const THINK_SEC = Number.parseFloat(process.env.HERMES_OFFICE_THINK_SEC || "25")
 // Working hours (local VPS tz). Outside → whole office `offline` (§10 OFF-HOURS).
 const OPEN_HOUR = Number.parseInt(process.env.HERMES_OFFICE_OPEN_HOUR || "6", 10);
 const CLOSE_HOUR = Number.parseInt(process.env.HERMES_OFFICE_CLOSE_HOUR || "22", 10);
+// ── GitHub half (nhánh B): issue(assignee)/PR(author) → badge #N per agent.
+// READ-ONLY qua `gh` CLI (dùng auth sẵn của máy, không token mới).
+const GH_ENABLED = !/^(0|false|no|off)$/i.test(process.env.HERMES_OFFICE_GH_ENABLED || "1");
+const GH_OWNER = (process.env.HERMES_OFFICE_GH_OWNER || "fs-agent-system").trim();
+const GH_POLL_SEC = Math.max(20, Number.parseInt(process.env.HERMES_OFFICE_GH_POLL_SEC || "90", 10));
 
 /**
  * Role → display metadata. Canonical id = Hermes profile `label` == role key,
@@ -90,15 +96,20 @@ const CLOSE_HOUR = Number.parseInt(process.env.HERMES_OFFICE_CLOSE_HOUR || "22",
  * roster). Only the 8 fixed Familstorm agents are rendered.
  */
 const ROLE_META = {
-  "project-coordinator": { name: "Tiểu Ly", deskId: "desk-project-coordinator" },
-  "technical-lead": { name: "Bro", deskId: "desk-technical-lead" },
-  "developer-backend": { name: "Brian Hermes", deskId: "desk-backend" },
-  "developer-frontend": { name: "Lego Hermes", deskId: "desk-frontend" },
-  devops: { name: "Mr. Robot", deskId: "desk-devops" },
-  "qa-tester": { name: "Hoa Mai", deskId: "desk-qa" },
-  designer: { name: "Chú Beo", deskId: "desk-designer" },
-  "account-manager": { name: "Sứ Giả", deskId: "desk-account-manager" },
+  "project-coordinator": { name: "Tiểu Ly", deskId: "desk-project-coordinator", github: "fs-tieuly" },
+  "technical-lead": { name: "Bro", deskId: "desk-technical-lead", github: "fs-bro" },
+  "developer-backend": { name: "Brian Hermes", deskId: "desk-backend", github: "fs-brian-hermes" },
+  "developer-frontend": { name: "Lego Hermes", deskId: "desk-frontend", github: "fs-lego-hermes" },
+  devops: { name: "Mr. Robot", deskId: "desk-devops", github: "fs-mr-robot" },
+  "qa-tester": { name: "Hoa Mai", deskId: "desk-qa", github: "fs-hoamai" },
+  designer: { name: "Chú Beo", deskId: "desk-designer", github: "fs-chubeo" },
+  "account-manager": { name: "Sứ Giả", deskId: "desk-account-manager", github: "fs-sugia" },
 };
+
+/** GitHub login (fs-*) → role label, để map assignee/author về đúng agent. */
+const GH_LOGIN_TO_ROLE = Object.fromEntries(
+  Object.entries(ROLE_META).map(([role, m]) => [m.github, role]),
+);
 
 // ── gate.log verb → operational state (10-state model, HERMES-09 §5/§10) ─────
 // SKIP (gate didn't run) and MERGE-REFUSED (a policy note, not agent activity)
@@ -211,6 +222,76 @@ function computeState(entry, nowMs) {
   }
 }
 
+// ── GitHub poll (nhánh B) ────────────────────────────────────────────────────
+// Per-role work item: { kind: "pr"|"issue", repo, number, title, url }.
+// PR (author) thắng issue (assignee) vì PR là việc đang nóng hơn trong cadence.
+const githubWorkByRole = new Map();
+let githubLastSyncMs = 0;
+let githubLastError = "";
+
+function ghSearch(kind) {
+  return new Promise((resolve) => {
+    const args = [
+      "search", kind,
+      "--owner", GH_OWNER,
+      "--state", "open",
+      "--limit", "50",
+      "--json",
+      kind === "prs"
+        ? "number,title,url,repository,author"
+        : "number,title,url,repository,assignees",
+    ];
+    execFile("gh", args, { timeout: 30_000 }, (err, stdout) => {
+      if (err) {
+        githubLastError = String(err.message || err).slice(0, 200);
+        resolve([]);
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout));
+      } catch {
+        resolve([]);
+      }
+    });
+  });
+}
+
+async function refreshGithub() {
+  if (!GH_ENABLED) return;
+  const [issues, prs] = await Promise.all([ghSearch("issues"), ghSearch("prs")]);
+  const next = new Map();
+  // Issues: map theo assignee; issue số nhỏ (cũ) trước → giữ cái đang claim lâu nhất.
+  for (const it of issues) {
+    for (const a of it.assignees || []) {
+      const role = GH_LOGIN_TO_ROLE[a.login];
+      if (!role || next.has(role)) continue;
+      next.set(role, {
+        kind: "issue",
+        repo: it.repository?.nameWithOwner || "",
+        number: it.number,
+        title: (it.title || "").slice(0, 120),
+        url: it.url || "",
+      });
+    }
+  }
+  // PRs: map theo author, GHI ĐÈ issue (PR đang mở là việc nóng nhất của agent).
+  for (const pr of prs) {
+    const role = GH_LOGIN_TO_ROLE[pr.author?.login];
+    if (!role) continue;
+    next.set(role, {
+      kind: "pr",
+      repo: pr.repository?.nameWithOwner || "",
+      number: pr.number,
+      title: (pr.title || "").slice(0, 120),
+      url: pr.url || "",
+    });
+  }
+  githubWorkByRole.clear();
+  for (const [k, v] of next) githubWorkByRole.set(k, v);
+  githubLastSyncMs = Date.now();
+  githubLastError = "";
+}
+
 function buildSnapshot() {
   refreshFromLog();
   const nowMs = Date.now();
@@ -232,6 +313,9 @@ function buildSnapshot() {
       agent.lastActivityAt = new Date(entry.tsMs).toISOString();
       agent.note = entry.msg.slice(0, 160);
     }
+    // GitHub work item (nhánh B) → office render badge #N.
+    const work = githubWorkByRole.get(role);
+    if (work) agent.task = work;
     return agent;
   });
   return {
@@ -287,6 +371,13 @@ const server = http.createServer((req, res) => {
       gateLogPresent: fs.existsSync(GATE_LOG),
       workspaceId: WORKSPACE_ID,
       agents: Object.keys(ROLE_META).length,
+      github: {
+        enabled: GH_ENABLED,
+        owner: GH_OWNER,
+        lastSyncAt: githubLastSyncMs ? new Date(githubLastSyncMs).toISOString() : null,
+        workItems: githubWorkByRole.size,
+        lastError: githubLastError || null,
+      },
     });
     return;
   }
@@ -310,9 +401,18 @@ const server = http.createServer((req, res) => {
 // Prime state from the existing log before accepting traffic.
 refreshFromLog();
 
+// GitHub poll: kick once at startup, then on interval (fire-and-forget).
+if (GH_ENABLED) {
+  refreshGithub();
+  setInterval(refreshGithub, GH_POLL_SEC * 1000).unref();
+}
+
 server.listen(PORT, () => {
   console.log(`[office-bridge] listening on http://localhost:${PORT}`);
   console.log(`[office-bridge] gate.log: ${GATE_LOG} (present=${fs.existsSync(GATE_LOG)})`);
   console.log(`[office-bridge] workspace: ${WORKSPACE_ID}, auth=${TOKEN ? "on" : "off"}`);
+  console.log(
+    `[office-bridge] github: ${GH_ENABLED ? `${GH_OWNER} every ${GH_POLL_SEC}s (gh CLI)` : "disabled"}`,
+  );
   console.log(`[office-bridge] presence: http://localhost:${PORT}/presence`);
 });
