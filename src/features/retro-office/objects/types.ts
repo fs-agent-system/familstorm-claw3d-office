@@ -5,6 +5,7 @@ import type {
   OfficeAgent,
   RenderAgent,
 } from "@/features/retro-office/core/types";
+import type { OfficeAgentState } from "@/lib/office/schema";
 
 export type BasicFurnitureModelProps = {
   item: FurnitureItem;
@@ -32,6 +33,8 @@ export type AgentModelProps = {
   name: string;
   subtitle?: string | null;
   status: OfficeAgent["status"];
+  /** Rich 10-state (HERMES-09 §10) — drives the head bubble emoji/colour; falls back to `status`. */
+  officeState?: OfficeAgentState | null;
   color: string;
   appearance?: AgentAvatarProfile | null;
   agentsRef: RefObject<RenderAgent[]>;

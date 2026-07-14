@@ -4387,6 +4387,15 @@ export function OfficeScreen({
     () => [...officeAgents, ...remoteOfficeAgents],
     [officeAgents, remoteOfficeAgents],
   );
+  // C3 (HERMES-09 §10): a remote agent in `reviewing` walks to the GitHub /
+  // server room via the existing review-hold plumbing. Local skill-triggered
+  // review (githubReviewAgentId) keeps priority; first reviewing agent wins.
+  const remoteReviewingAgentId = useMemo(
+    () =>
+      remoteOfficeAgents.find((agent) => agent.officeState === "reviewing")?.id ??
+      null,
+    [remoteOfficeAgents],
+  );
   const remoteOfficeVisible =
     remoteOfficeEnabled &&
     (remoteOfficeSourceKind === "presence_endpoint"
@@ -4771,7 +4780,7 @@ export function OfficeScreen({
           officeCenterSignal={officeCameraCenterSignal}
           animationState={officeAnimationState}
           deskAssignmentByDeskUid={deskAssignmentByDeskUid}
-          githubReviewAgentId={githubReviewAgentId}
+          githubReviewAgentId={githubReviewAgentId ?? remoteReviewingAgentId}
           qaTestingAgentId={qaTestingAgentId}
           phoneBoothAgentId={activePhoneBoothAgentId}
           phoneCallScenario={activePhoneCallScenario}

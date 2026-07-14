@@ -1,6 +1,6 @@
 import { Billboard, Text } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import { memo, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { createDefaultAgentAvatarProfile } from "@/lib/avatars/profile";
 import {
@@ -17,6 +17,29 @@ import { AgentModelProps } from "@/features/retro-office/objects/types";
 const MAX_NAMEPLATE_TEXT_LENGTH = 10;
 const MAX_SPEECH_BUBBLE_TEXT_LENGTH = 180;
 const MAX_SPEECH_BUBBLE_LINES = 4;
+
+/**
+ * Head-bubble visuals per rich operational state (HERMES-09 §10, C3).
+ * `bubble` replaces the idle "..." text; `text`/`border` colour the bubble;
+ * `dot` overrides the status-dot colour. States absent here (idle/working)
+ * keep the legacy 3-state look.
+ */
+const OFFICE_STATE_BUBBLE: Record<
+  string,
+  { bubble: string; text: string; border: string; dot: string }
+> = {
+  thinking: { bubble: "💭", text: "#e9d5ff", border: "#c084fc", dot: "#c084fc" },
+  waiting: { bubble: "⏳", text: "#a5f3fc", border: "#22d3ee", dot: "#22d3ee" },
+  reviewing: { bubble: "🔍", text: "#fef08a", border: "#facc15", dot: "#facc15" },
+  blocked: { bubble: "⚠", text: "#fecaca", border: "#f87171", dot: "#f87171" },
+  meeting: { bubble: "👥", text: "#c7d2fe", border: "#818cf8", dot: "#818cf8" },
+  completed: { bubble: "🎉", text: "#a7f3d0", border: "#34d399", dot: "#34d399" },
+  error: { bubble: "✕", text: "#ff9aa5", border: "#ff7f93", dot: "#ef4444" },
+  offline: { bubble: "🌙", text: "#9ca3af", border: "#6b7280", dot: "#6b7280" },
+};
+
+/** Materials become translucent while offline (§10 "avatar mờ"). */
+const OFFLINE_OPACITY = 0.35;
 
 const formatAgentNameplateText = (value: string): string => {
   const normalized = value.replace(/\s+/g, " ").trim();
@@ -52,6 +75,7 @@ export const AgentModel = memo(function AgentModel({
   name,
   subtitle,
   status,
+  officeState = null,
   color,
   appearance,
   agentsRef,
@@ -335,8 +359,11 @@ export const AgentModel = memo(function AgentModel({
     const isAway = agent.state === "away";
 
     if (statusDotMatRef.current) {
+      const stateDot = officeState
+        ? OFFICE_STATE_BUBBLE[officeState]?.dot
+        : undefined;
       statusDotMatRef.current.color.set(
-        isError ? "#ef4444" : working ? "#22c55e" : "#f59e0b",
+        stateDot ?? (isError ? "#ef4444" : working ? "#22c55e" : "#f59e0b"),
       );
     }
 
@@ -475,6 +502,11 @@ export const AgentModel = memo(function AgentModel({
 
     const ambientBubbleVisible =
       (!suppressSpeechBubble && isError) ||
+      // C3: rich states show their emoji bubble persistently — the Bridge
+      // already times the states out (thinking→working, completed→idle), and
+      // blocked must stay visible until resolved (HERMES-09 §10).
+      (!suppressSpeechBubble &&
+        Boolean(officeState && OFFICE_STATE_BUBBLE[officeState])) ||
       (!isAway &&
         !suppressSpeechBubble &&
         !working &&
@@ -608,12 +640,38 @@ export const AgentModel = memo(function AgentModel({
     return texture;
   }, [skin]);
 
+  // Offline → dim the whole character (§10 "avatar mờ"). Restores on state change.
+  useEffect(() => {
+    const group = groupRef.current;
+    if (!group || officeState !== "offline") return;
+    const touched: Array<[THREE.Material, number, boolean]> = [];
+    group.traverse((child) => {
+      if (!(child instanceof THREE.Mesh)) return;
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const mat of materials) {
+        if (!mat || typeof mat.opacity !== "number") continue;
+        touched.push([mat, mat.opacity, mat.transparent]);
+        mat.transparent = true;
+        mat.opacity = Math.min(mat.opacity, OFFLINE_OPACITY);
+      }
+    });
+    return () => {
+      for (const [mat, opacity, transparent] of touched) {
+        mat.opacity = opacity;
+        mat.transparent = transparent;
+      }
+    };
+  }, [officeState]);
+
+  const stateBubble = officeState ? OFFICE_STATE_BUBBLE[officeState] : undefined;
   const resolvedSpeechText =
     showSpeech && speechText?.trim()
       ? speechText.trim()
-      : status === "error"
-        ? "error"
-        : "...";
+      : stateBubble
+        ? stateBubble.bubble
+        : status === "error"
+          ? "error"
+          : "...";
   const activeSpeechBubble = showSpeech && Boolean(speechText?.trim());
   const normalizedSpeechBubbleText = activeSpeechBubble
     ? flattenSpeechBubbleMarkdown(resolvedSpeechText)
@@ -657,18 +715,22 @@ export const AgentModel = memo(function AgentModel({
     : 0.13;
   const speechBubbleTextColor = activeSpeechBubble
     ? "#f8fafc"
-    : status === "error"
-      ? "#ff9aa5"
-      : status === "working"
-        ? "#b9f99d"
-        : "#a0c8ff";
+    : stateBubble
+      ? stateBubble.text
+      : status === "error"
+        ? "#ff9aa5"
+        : status === "working"
+          ? "#b9f99d"
+          : "#a0c8ff";
   const speechBubbleBorderColor = activeSpeechBubble
     ? status === "error"
       ? "#ff7f93"
       : status === "working"
         ? "#93f57d"
         : "#8dc4ff"
-    : "transparent";
+    : stateBubble
+      ? stateBubble.border
+      : "transparent";
   const speechBubbleBorderInset = activeSpeechBubble ? 0.03 : 0;
   const nameplateText = name ? formatAgentNameplateText(name) : "";
   const subtitleText = typeof subtitle === "string" ? subtitle.trim() : "";

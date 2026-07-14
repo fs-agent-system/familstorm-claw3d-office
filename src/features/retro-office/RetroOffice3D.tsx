@@ -5735,6 +5735,9 @@ export function RetroOffice3D({
                   name={agent.name}
                   subtitle={"subtitle" in agent ? agent.subtitle ?? null : null}
                   status={agent.status}
+                  officeState={
+                    "officeState" in agent ? agent.officeState ?? null : null
+                  }
                   color={agentColorMap.get(agent.id) ?? "#888"}
                   appearance={
                     "avatarProfile" in agent
