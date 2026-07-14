@@ -4703,6 +4703,9 @@ export function OfficeScreen({
     connectPromptReady &&
     status === "disconnected" &&
     !agentsLoaded &&
+    // Read-only remote office (HERMES-09 §9): presence agents are already
+    // visible without any gateway — don't force the connect screen over them.
+    remoteOfficeAgents.length === 0 &&
     (shouldPromptForConnect || showDelayedGatewayConnectOverlay);
 
   const runningCount = state.agents.filter(
