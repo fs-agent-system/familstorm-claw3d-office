@@ -48,6 +48,10 @@ import type { MockPhoneCallScenario } from "@/lib/office/call/types";
 import { buildMockTextMessageScenario } from "@/lib/office/text/mock";
 import type { MockTextMessageScenario } from "@/lib/office/text/types";
 import type { OfficeDeskMonitor } from "@/lib/office/deskMonitor";
+import {
+  resolveAgentStateVisual,
+  type AgentStateVisual,
+} from "@/lib/office/agentStateVisual";
 import type { OfficeAnimationState } from "@/lib/office/eventTriggers";
 import type { StandupMeeting } from "@/lib/office/standup/types";
 import type { SkillStatusEntry } from "@/lib/skills/types";
@@ -2901,6 +2905,20 @@ export function RetroOffice3D({
         {},
       ),
     [agents, renderAgentUiById],
+  );
+  const agentStateVisualLookup = useMemo(
+    () =>
+      agents.reduce<Record<string, AgentStateVisual>>((acc, agent) => {
+        acc[agent.id] = resolveAgentStateVisual(
+          agent.officeState,
+          agentStatusLookup[agent.id] ?? {
+            isError: agent.status === "error",
+            working: agent.status === "working",
+          },
+        );
+        return acc;
+      }, {}),
+    [agents, agentStatusLookup],
   );
   const hoveredAgent = useMemo(
     () =>
@@ -5921,21 +5939,15 @@ export function RetroOffice3D({
           <div className="flex items-center gap-2 rounded-full border border-amber-900/25 bg-[#1c1610]/92 px-2 py-2 shadow-lg backdrop-blur-sm">
             <div className="flex items-center -space-x-1.5">
               {compactRosterAgents.map((agent) => {
-                const status = agentStatusLookup[agent.id];
-                const isError = status?.isError ?? agent.status === "error";
-                const working = status?.working ?? agent.status === "working";
                 const isRemoteAgent = isRemoteOfficeAgentId(agent.id);
                 const mood = moodByAgentId[agent.id];
-                const dotClass = isError
-                  ? "bg-red-400"
-                  : working
-                    ? "bg-green-400"
-                    : "bg-yellow-400";
+                const visual = agentStateVisualLookup[agent.id];
+                const dotClass = visual?.dotClass ?? "bg-yellow-400";
                 return (
                   <button
                     key={agent.id}
                     type="button"
-                    title={agent.name}
+                    title={visual ? `${agent.name} — ${visual.label}` : agent.name}
                     onMouseEnter={() => handleAgentHover(agent.id)}
                     onMouseLeave={handleAgentUnhover}
                     onClick={() => {
@@ -5964,6 +5976,11 @@ export function RetroOffice3D({
                       </span>
                     ) : null}
                     <span>{getAgentInitials(agent.name)}</span>
+                    {visual?.emoji ? (
+                      <span className="absolute -top-1 -left-1 text-[9px] leading-none pointer-events-none">
+                        {visual.emoji}
+                      </span>
+                    ) : null}
                     <span
                       className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-[#1c1610] ${dotClass}`}
                     />
@@ -6015,15 +6032,9 @@ export function RetroOffice3D({
 
               <div className="grid max-h-[min(60vh,420px)] gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
                 {agents.map((agent) => {
-                  const status = agentStatusLookup[agent.id];
-                  const isError = status?.isError ?? agent.status === "error";
-                  const working = status?.working ?? agent.status === "working";
                   const isRemoteAgent = isRemoteOfficeAgentId(agent.id);
-                  const dotClass = isError
-                    ? "bg-red-400"
-                    : working
-                      ? "bg-green-400"
-                      : "bg-yellow-400";
+                  const visual = agentStateVisualLookup[agent.id];
+                  const dotClass = visual?.dotClass ?? "bg-yellow-400";
                   const runCount = runCountByAgentId[agent.id] ?? 0;
                   return (
                     <div
@@ -6055,7 +6066,8 @@ export function RetroOffice3D({
                             {agent.name}
                           </div>
                           <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-amber-500/70">
-                            {isError ? "error" : working ? "working" : "idle"}
+                            {visual?.emoji ? `${visual.emoji} ` : ""}
+                            {visual?.label ?? "idle"}
                             {isRemoteAgent ? " · remote" : ""}
                             {runCount > 0 ? ` · ${runCount} runs` : ""}
                           </div>
@@ -6134,10 +6146,12 @@ export function RetroOffice3D({
       {!immersiveOverlayActive &&
         hoveredAgent &&
         (() => {
-          const isError =
-            hoveredAgentStatus?.isError ?? hoveredAgent.status === "error";
-          const working =
-            hoveredAgentStatus?.working ?? hoveredAgent.status === "working";
+          const visual =
+            agentStateVisualLookup[hoveredAgent.id] ??
+            resolveAgentStateVisual(hoveredAgent.officeState, {
+              isError: hoveredAgentStatus?.isError ?? hoveredAgent.status === "error",
+              working: hoveredAgentStatus?.working ?? hoveredAgent.status === "working",
+            });
           return (
             <div className="absolute top-24 left-1/2 -translate-x-1/2 z-30 pointer-events-none select-none">
               <div className="flex items-center gap-3 bg-[#120e08]/95 backdrop-blur-sm border border-amber-800/30 rounded-lg px-4 py-2.5 shadow-xl">
@@ -6147,13 +6161,7 @@ export function RetroOffice3D({
                     style={{ backgroundColor: hoveredAgent.color }}
                   />
                   <div
-                    className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-[#120e08] ${
-                      isError
-                        ? "bg-red-400"
-                        : working
-                          ? "bg-green-400"
-                          : "bg-yellow-400"
-                    }`}
+                    className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-[#120e08] ${visual.dotClass}`}
                   />
                 </div>
                 <div>
@@ -6177,15 +6185,10 @@ export function RetroOffice3D({
                   })()}
                 </div>
                 <div
-                  className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ml-1 ${
-                    isError
-                      ? "bg-red-900/40 text-red-400 ring-1 ring-red-800/40"
-                      : working
-                        ? "bg-green-900/40 text-green-400 ring-1 ring-green-800/40"
-                        : "bg-yellow-900/30 text-yellow-500 ring-1 ring-yellow-800/30"
-                  }`}
+                  className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ml-1 ${visual.pillClass}`}
                 >
-                  {isError ? "error" : working ? "working" : "idle"}
+                  {visual.emoji ? `${visual.emoji} ` : ""}
+                  {visual.label}
                 </div>
               </div>
             </div>

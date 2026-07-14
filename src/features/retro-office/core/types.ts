@@ -1,11 +1,18 @@
 import type { AgentAvatarProfile } from "@/lib/avatars/profile";
 import type { OfficeInteractionTargetId } from "@/lib/office/places";
+import type { OfficeAgentState } from "@/lib/office/schema";
 
 export type OfficeAgent = {
   id: string;
   name: string;
   subtitle?: string | null;
   status: "working" | "idle" | "error";
+  /**
+   * Rich 10-state operational state (HERMES-09 §10) when known — drives status
+   * colour/label/badge in overlays. `status` above stays the 3-state collapse
+   * that the scene animation logic relies on.
+   */
+  officeState?: OfficeAgentState;
   color: string;
   item: string;
   avatarProfile?: AgentAvatarProfile | null;

@@ -600,6 +600,7 @@ const mapRemotePresenceAgentToOffice = (agent: {
     id: stableId,
     name: agent.name || "Unknown",
     status: collapseOfficeAgentState(agent.state),
+    officeState: agent.state,
     color: stringToColor(stableId),
     item: getDeterministicItem(stableId),
     avatarProfile: null,
