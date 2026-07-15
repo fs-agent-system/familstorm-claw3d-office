@@ -41,7 +41,8 @@ export const OFFICE_FLOORS: readonly FloorDefinition[] = [
     provider: "demo",
     kind: "lobby",
     zone: "building",
-    enabled: true,
+    // Familstorm: văn phòng thật duy nhất (HERMES-09) — tắt sảnh demo.
+    enabled: false,
     sortOrder: 0,
     runtimeProfileId: null,
   },

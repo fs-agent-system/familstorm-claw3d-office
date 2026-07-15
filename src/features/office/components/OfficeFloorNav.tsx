@@ -103,9 +103,12 @@ export function OfficeFloorNav({
   const buildingFloors = availableFloors.filter((f) => f.zone === "building");
   const outsideFloors = availableFloors.filter((f) => f.zone === "outside");
 
-  // Active floor — fall back to lobby if current floor is no longer available
+  // Active floor — fall back to the first available floor if the current one
+  // is no longer available (lobby demo is disabled in the Familstorm fork).
   const activeIsAvailable = availableFloors.some((f) => f.id === activeFloorId);
-  const displayActiveFloorId = activeIsAvailable ? activeFloorId : "lobby";
+  const displayActiveFloorId = activeIsAvailable
+    ? activeFloorId
+    : (availableFloors[0]?.id ?? activeFloorId);
 
   const activeFloor =
     OFFICE_FLOORS.find((floor) => floor.id === displayActiveFloorId) ?? OFFICE_FLOORS[0];

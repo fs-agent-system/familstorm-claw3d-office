@@ -1120,7 +1120,9 @@ export function OfficeScreen({
   const [deskAssignmentByDeskUid, setDeskAssignmentByDeskUid] = useState<
     Record<string, string>
   >({});
-  const [activeFloorId, setActiveFloorId] = useState<FloorId>("lobby");
+  const [activeFloorId, setActiveFloorId] = useState<FloorId>(() =>
+    resolveActiveOfficeFloorId(null),
+  );
   const [pendingFloorRuntimeSwitch, setPendingFloorRuntimeSwitch] =
     useState<PendingFloorRuntimeSwitch | null>(null);
   const previousGatewayStatusRef = useRef<"disconnected" | "connecting" | "connected">(
@@ -1130,7 +1132,7 @@ export function OfficeScreen({
   const [floorRosterCache, setFloorRosterCache] = useState(() =>
     createFloorRosterCache(),
   );
-  const activeFloorIdRef = useRef<FloorId>("lobby");
+  const activeFloorIdRef = useRef<FloorId>(resolveActiveOfficeFloorId(null));
   const floorRosterCacheRef = useRef(floorRosterCache);
   const [gatewayModels, setGatewayModels] = useState<GatewayModelChoice[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -1492,10 +1494,12 @@ export function OfficeScreen({
       }
 
       // Guard: if this is a runtime floor and there's no gateway URL to connect to,
-      // bail back to lobby rather than entering a connect-hang limbo state.
+      // bail back to the default floor rather than entering a connect-hang limbo
+      // state (lobby demo is disabled in the Familstorm fork).
       if (floor.kind === "runtime" && !nextGatewayUrl.trim()) {
-        setActiveFloorId("lobby");
-        settingsCoordinator.schedulePatch({ activeFloorId: "lobby" }, 0);
+        const fallbackFloorId = resolveActiveOfficeFloorId(null);
+        setActiveFloorId(fallbackFloorId);
+        settingsCoordinator.schedulePatch({ activeFloorId: fallbackFloorId }, 0);
         setAgentsLoaded(true);
         return;
       }
